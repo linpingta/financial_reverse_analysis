@@ -1,0 +1,189 @@
+# ============================================================================
+# 逆向周期行业投资分析系统 - 配置文件
+# ============================================================================
+
+# 项目基本信息
+project:
+  name: "逆向周期行业投资分析系统"
+  version: "1.0.0"
+  description: "基于基本面-估值-股价背离的逆向投资策略分析"
+
+# ============================================================================
+# 数据源配置
+# ============================================================================
+data_sources:
+  # 主数据源：Baostock（免费、无限制）
+  baostock:
+    enabled: true
+    description: "主要数据源：行情、财务数据"
+
+  # 辅助数据源：Akshare
+  akshare:
+    enabled: true
+    description: "辅助数据源：申万行业估值、宏观数据"
+
+  # 备用数据源：Tushare（权限有限）
+  tushare:
+    enabled: false
+    token: ""
+    description: "备用数据源，免费版权限有限"
+
+# ============================================================================
+# 目标行业配置（10个强周期行业）
+# ============================================================================
+industries:
+  target_industries:
+    - name: "航空机场"
+      baostock_code: "G56"
+      sw_index_code: "801991.SI"
+      benchmarks:
+        - "旅客周转量"
+        - "客座率"
+        - "航油价格"
+
+    - name: "生猪养殖"
+      baostock_code: "A03"
+      sw_index_code: "801017.SI"
+      benchmarks:
+        - "能繁母猪存栏量"
+        - "生猪价格"
+        - "猪粮比"
+
+    - name: "基础化工"
+      baostock_code: "C26"
+      sw_index_code: "801033.SI"
+      benchmarks:
+        - "化工品价格指数"
+        - "开工率"
+        - "库存周期"
+
+    - name: "煤炭"
+      baostock_code: "B06"
+      sw_index_code: "801951.SI"
+      benchmarks:
+        - "秦皇岛煤价指数"
+        - "港口库存"
+        - "发电量"
+
+    - name: "有色金属"
+      baostock_code: "C32"
+      sw_index_code: "801055.SI"
+      benchmarks:
+        - "LME铜价"
+        - "库存变化"
+        - "加工费"
+
+    - name: "远洋航运"
+      baostock_code: "G55"
+      sw_index_code: "801992.SI"
+      benchmarks:
+        - "BDI指数"
+        - "集装箱运价"
+        - "新船订单"
+
+    - name: "酒店旅游"
+      baostock_code: "H61"
+      sw_index_code: "801219.SI"
+      benchmarks:
+        - "出游人数"
+        - "酒店入住率"
+        - "旅游收入"
+
+    - name: "周期半导体"
+      baostock_code: "C39"
+      sw_index_code: "801081.SI"
+      benchmarks:
+        - "全球半导体销售额"
+        - "存储芯片价格"
+
+    - name: "光伏上游"
+      baostock_code: "C38"
+      sw_index_code: "801735.SI"
+      benchmarks:
+        - "硅料价格"
+        - "组件价格"
+        - "装机量"
+
+    - name: "工程机械"
+      baostock_code: "C35"
+      sw_index_code: "801077.SI"
+      benchmarks:
+        - "挖掘机销量"
+        - "小松开工小时数"
+        - "房地产新开工"
+
+# ============================================================================
+# 数据获取参数
+# ============================================================================
+data_params:
+  # 历史数据时间范围
+  history_years: 10
+
+  # 数据更新频率
+  update_frequency: "weekly"
+
+  # 数据缓存设置
+  cache:
+    enabled: true
+    expire_hours: 24
+
+# ============================================================================
+# 分析参数
+# ============================================================================
+analysis:
+  # 分位计算参数
+  percentile:
+    low_threshold: 20
+    high_threshold: 80
+
+  # 背离检测参数
+  divergence:
+    price_window: 12
+    valuation_window: 12
+    confirm_weeks: 4
+
+  # 逆向信号判定
+  signal:
+    min_percentile_diff: 10
+    min_score: 60
+
+# ============================================================================
+# 宏观景气指标配置
+# ============================================================================
+macro:
+  indicators:
+    - name: "制造业PMI"
+      source: "akshare"
+      api: "macro_china_pmi"
+      direction: "positive"
+
+    - name: "CPI"
+      source: "akshare"
+      api: "macro_china_cpi"
+      direction: "neutral"
+
+    - name: "PPI"
+      source: "akshare"
+      api: "macro_china_ppi"
+      direction: "positive"
+
+    - name: "货币供应量M2"
+      source: "akshare"
+      api: "macro_china_money_supply"
+      direction: "positive"
+
+# ============================================================================
+# 输出配置
+# ============================================================================
+output:
+  report_dir: "reports"
+  formats:
+    - "markdown"
+    - "csv"
+  database: "data/results.db"
+
+  log:
+    level: "INFO"
+    file: "logs/app.log"
+    rotation: "100 MB"
+    retention: "30 days"
