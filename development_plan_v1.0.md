@@ -37,35 +37,361 @@
 
 ### 阶段二：数据采集模块开发
 
-#### 2.1 Akshare 适配器
-| 序号 | 任务 | 说明 | 优先级 |
-|------|------|------|--------|
-| 2.1.1 | 行业指数数据获取 | `get_industry_index()` | P0 |
-| 2.1.2 | 行业PE/PB获取 | `get_industry_pe_pb()` | P0 |
-| 2.1.3 | 宏观PMI数据 | `get_macro_pmi()` | P1 |
-| 2.1.4 | 工业企业利润 | `get_industrial_profit()` | P1 |
+#### 2.0 数据源方案（已验证）
 
-#### 2.2 Tushare 适配器
-| 序号 | 任务 | 说明 | 优先级 |
-|------|------|------|--------|
-| 2.2.1 | Tushare 初始化 | token 配置 | P0 |
-| 2.2.2 | 行业估值数据 | 补充 akshare | P1 |
-| 2.2.3 | 机构持仓数据 | 基金重仓、北向资金 | P2 |
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          数据源架构（已验证可用）                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  【行业实时PE/PB】                                                       │
+│    接口: akshare.sw_index_second_info()                                 │
+│    覆盖: 131个申万二级行业，含静态PE、TTM PE、PB、股息率                  │
+│    状态: ✅ 已验证                                                       │
+│                                                                         │
+│  【行业历史价格】                                                        │
+│    接口: baostock.query_history_k_data_plus()                          │
+│    覆盖: 10年+ 日线数据，含收盘价、成交量、市值                           │
+│    状态: ✅ 已验证                                                       │
+│                                                                         │
+│  【行业成分股】                                                          │
+│    接口: baostock.query_stock_industry()                               │
+│    覆盖: 5530只股票/84个行业分类                                        │
+│    状态: ✅ 已验证                                                       │
+│                                                                         │
+│  【个股财务数据】                                                        │
+│    接口: baostock.query_profit_data()                                   │
+│    覆盖: 10年+ 利润表数据，含 epsTTM                                    │
+│    状态: ✅ 已验证                                                       │
+│                                                                         │
+│  【宏观景气指标】                                                        │
+│    接口: akshare.macro_china_pmi() / macro_china_cpi() 等              │
+│    覆盖: PMI、CPI、PPI、M2、工业企业利润                                 │
+│    状态: ✅ 已验证                                                       │
+│                                                                         │
+│  【申万行业列表】                                                        │
+│    接口: akshare.sw_index_first_info() / sw_index_second_info()        │
+│    覆盖: 31个申万一级行业、131个申万二级行业                             │
+│    状态: ✅ 已验证                                                       │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
-#### 2.3 爬虫模块
-| 序号 | 任务 | 说明 | 优先级 |
-|------|------|------|--------|
-| 2.3.1 | 国家统计局API | GDP、PMI爬取 | P1 |
-| 2.3.2 | 行业协会数据 | **需用户提供URL** | P2 |
+#### 2.1 Baostock 数据采集器（主数据源）
 
-#### 2.4 数据采集入口
-| 序号 | 任务 | 说明 | 优先级 |
-|------|------|------|--------|
-| 2.4.1 | Collector 统一入口 | 整合所有数据源 | P0 |
-| 2.4.2 | 降级策略实现 | 备源降级 | P1 |
-| 2.4.3 | 数据缓存机制 | 周内多次运行复用 | P1 |
+**模块**: `src/data/collectors/baostock_collector.py`
 
-**待确认**：行业协会数据URL
+```python
+# 数据采集接口清单
+
+# 1. 登录/登出
+bs.login()
+bs.logout()
+
+# 2. 行业成分股列表
+bs.query_stock_industry()
+# 返回: 股票代码、名称、行业分类
+
+# 3. 沪深300成分股
+bs.query_hs300_stocks()
+# 返回: 成分股列表
+
+# 4. 个股历史K线（含调整因子）
+bs.query_history_k_data_plus(
+    code="sh.600519",
+    fields="date,code,open,high,low,close,volume,amount",
+    start_date="2014-01-01",
+    end_date="2024-12-31",
+    frequency="d"  # d=日线, w=周线, m=月线
+)
+
+# 5. 个股利润表
+bs.query_profit_data(
+    code="sh.600519",
+    year="2024",
+    quarter="4"  # 可选
+)
+# 返回字段: pubDate, statDate, code, roe, npMargins, gpMargin,
+#          epsTTM(关键字段), netProfit, opProfit, revenue, totalAsset
+
+# 6. 季频财务指标（包含更多字段）
+bs.query_quarterly_fina_indicator(
+    code="sh.600519",
+    start_date="2014-01-01",
+    end_date="2024-12-31"
+)
+```
+
+#### 2.2 Akshare 数据采集器（辅助数据源）
+
+**模块**: `src/data/collectors/akshare_collector.py`
+
+```python
+# 数据采集接口清单
+
+# 1. 申万二级行业实时估值（核心接口）
+ak.sw_index_second_info()
+# 返回: 行业代码、行业名称、静态PE、TTM PE、PB、市净率、股息率、市值
+# 用途: 获取当前行业PE/PB分位
+
+# 2. 申万一级行业列表
+ak.sw_index_first_info()
+# 返回: 申万一级行业代码和名称
+
+# 3. 申万行业历史日线
+ak.sw_index_daily(indicator="801991.SI")
+# 返回: 申万行业指数历史数据
+
+# 4. 宏观PMI数据
+ak.macro_china_pmi()
+# 返回: 制造业PMI、非制造业PMI
+
+# 5. 宏观CPI/PPI
+ak.macro_china_cpi()
+ak.macro_china_ppi()
+
+# 6. 货币供应量
+ak.macro_china_money_supply()
+
+# 7. 工业企业利润
+ak.macro_china_industrial_enterprise_profit()
+```
+
+#### 2.3 行业PE/PB计算器（核心模块）
+
+**模块**: `src/data/industry_pe_pb_calculator.py`
+
+由于申万只提供实时PE/PB，需要自行计算历史分位：
+
+```python
+"""
+行业历史 PE/PB 计算方法
+
+方法1: 基于成分股财务数据加权计算
+  PE_TTM = Σ(成分股市值) / Σ(成分股净利润TTM)
+  PB = Σ(成分股市值) / Σ(成分股净资产)
+
+方法2: 指数点位 / 指数EPS
+  PE = 指数点位 / 指数EPS
+  (需要申万提供指数EPS历史数据，或自行计算)
+
+推荐实现路径:
+1. 使用 akshare.sw_index_second_info() 获取当前PE/PB
+2. 使用 akshare.sw_index_daily() 获取行业指数历史点位
+3. 使用 baostock 成分股财务数据估算历史PE分位
+
+简化方案（满足基本需求）:
+1. 获取申万行业当前PE/PB（实时）
+2. 获取行业指数历史点位
+3. 通过点位变化估算估值分位
+"""
+
+class IndustryPEPBHistoryCalculator:
+    """行业历史PE/PB计算器"""
+
+    def get_current_pe_pb(self, sw_index_code: str) -> dict:
+        """获取当前PE/PB（来自申万实时数据）"""
+        pass
+
+    def get_industry_index_history(self, sw_index_code: str) -> pd.DataFrame:
+        """获取行业指数历史点位"""
+        pass
+
+    def calculate_percentile(self, sw_index_code: str) -> dict:
+        """计算PE/PB分位"""
+        pass
+```
+
+#### 2.4 模块文件结构
+
+```
+src/data/
+├── __init__.py
+├── collectors/
+│   ├── __init__.py
+│   ├── base_collector.py      # 基类，定义统一接口
+│   ├── baostock_collector.py  # Baostock 数据采集器
+│   ├── akshare_collector.py   # Akshare 数据采集器
+│   └── macro_collector.py     # 宏观数据采集器
+├── industry_pe_pb_calculator.py  # 行业PE/PB计算器
+├── industry_mapper.py         # 行业映射（业务→申万→Baostock）
+├── data_cache.py              # 数据缓存（避免重复请求）
+└── collector_factory.py        # 采集器工厂
+```
+
+#### 2.5 统一数据接口
+
+**模块**: `src/data/collector_factory.py`
+
+```python
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
+import pandas as pd
+
+@dataclass
+class IndustryData:
+    """行业数据结构"""
+    name: str                    # 业务行业名称
+    sw_code: str                 # 申万行业代码
+    baostock_code: str           # Baostock 行业代码
+
+    # 当前数据
+    current_price: Optional[float] = None
+    current_pe: Optional[float] = None
+    current_pb: Optional[float] = None
+    pe_percentile: Optional[float] = None  # PE历史分位
+    pb_percentile: Optional[float] = None  # PB历史分位
+
+    # 历史数据
+    price_history: Optional[pd.DataFrame] = None
+    pe_history: Optional[pd.DataFrame] = None
+
+    # 元数据
+    update_time: Optional[datetime] = None
+
+class DataCollector:
+    """统一数据采集入口"""
+
+    def __init__(self, config: dict):
+        self.config = config
+        self.baostock = BaostockCollector()
+        self.akshare = AkshareCollector()
+        self.macro = MacroCollector()
+
+    def collect_industry(self, industry_name: str) -> IndustryData:
+        """采集指定行业的完整数据"""
+        pass
+
+    def collect_all_industries(self) -> list[IndustryData]:
+        """采集所有目标行业数据"""
+        pass
+
+    def collect_macro(self) -> dict:
+        """采集宏观数据"""
+        pass
+```
+
+#### 2.6 任务清单（修订）
+
+| 序号 | 任务 | 接口/方法 | 优先级 |
+|------|------|----------|--------|
+| 2.1 | Baostock采集器基类 | `base_collector.py` | P0 |
+| 2.2 | Baostock行情数据 | `query_history_k_data_plus()` | P0 |
+| 2.3 | Baostock成分股 | `query_stock_industry()` | P0 |
+| 2.4 | Baostock财务数据 | `query_profit_data()` | P0 |
+| 2.5 | Akshare申万实时估值 | `sw_index_second_info()` | P0 |
+| 2.6 | Akshare宏观数据 | `macro_china_*` | P1 |
+| 2.7 | 行业PE/PB计算器 | `industry_pe_pb_calculator.py` | P0 |
+| 2.8 | 行业映射表 | `industry_mapper.py` | P0 |
+| 2.9 | 数据缓存机制 | `data_cache.py` | P1 |
+| 2.10 | 统一采集入口 | `collector_factory.py` | P0 |
+
+**注**: Tushare 适配器已降级为P2（免费版数据有限）
+
+**待确认**: 无需用户提供额外数据
+
+---
+
+#### 2.7 数据采集流程图
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      数据采集主流程                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. 初始化                                                       │
+│     ├── 加载 config.yaml                                        │
+│     ├── 登录 Baostock                                           │
+│     └── 初始化 Akshare                                          │
+│                                                                 │
+│  2. 获取行业列表                                                 │
+│     └── 读取配置的 10 个目标行业                                  │
+│                                                                 │
+│  3. 批量采集行业数据（每个行业）                                  │
+│     ┌─────────────────────────────────────────────────────────┐ │
+│     │ 3.1 获取申万实时PE/PB                                    │ │
+│     │     └── akshare.sw_index_second_info()                 │ │
+│     │                                                         │ │
+│     │ 3.2 获取行业指数历史点位                                  │ │
+│     │     └── akshare.sw_index_daily()                       │ │
+│     │                                                         │ │
+│     │ 3.3 计算PE/PB分位                                        │ │
+│     │     └── 基于历史数据计算                                  │ │
+│     │                                                         │ │
+│     │ 3.4 获取成分股列表（备用）                                │ │
+│     │     └── baostock.query_stock_industry()                │ │
+│     │                                                         │ │
+│     │ 3.5 获取个股财务数据（备用）                              │ │
+│     │     └── baostock.query_profit_data()                   │ │
+│     └─────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│  4. 采集宏观数据                                                 │
+│     └── akshare.macro_china_pmi/cpi/ppi()                     │
+│                                                                 │
+│  5. 缓存数据                                                     │
+│     └── 保存到本地缓存，避免重复请求                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 2.8 错误处理与降级策略
+
+```python
+# 错误处理策略
+ERROR_STRATEGY = {
+    # 网络错误：重试3次，间隔2秒
+    "NetworkError": {"retry": 3, "interval": 2, "fallback": None},
+
+    # 数据为空：使用备源
+    "DataEmpty": {"retry": 1, "fallback": "alternative_source"},
+
+    # API限流：等待后重试
+    "RateLimit": {"retry": 5, "interval": 60, "fallback": None},
+
+    # 未知错误：跳过并记录
+    "Unknown": {"retry": 0, "fallback": None, "log": True},
+}
+
+# 降级数据源映射
+FALLBACK_MAP = {
+    # 申万实时PE/PB
+    "akshare_sw_pe_pb": ["baostock_self_calculation", "skip"],
+
+    # Baostock K线
+    "baostock_kline": ["akshare_sw_daily", "skip"],
+
+    # 宏观数据
+    "macro_pmi": ["skip", "manual"],
+}
+```
+
+#### 2.9 缓存机制
+
+```python
+# 数据缓存设计
+CACHE_CONFIG = {
+    "enabled": True,
+    "cache_dir": "data/cache",
+    "expire_hours": 24,  # 日线数据缓存24小时
+
+    # 缓存文件命名
+    # data/cache/industry_pe_pb_YYYYMMDD.json
+    # data/cache/macro_2024_06.json
+}
+```
+
+---
+
+**产出**：
+- `src/data/collectors/baostock_collector.py`
+- `src/data/collectors/akshare_collector.py`
+- `src/data/industry_pe_pb_calculator.py`
+- `src/data/industry_mapper.py`
+- `src/data/data_cache.py`
+- `src/data/collector_factory.py`
+
+---
 
 ---
 
@@ -218,11 +544,12 @@ P2 任务（增强功能）:
 
 | 序号 | 问题 | 状态 |
 |------|------|------|
-| 1 | 是否提供 Tushare token？ | 待确认 |
-| 2 | 行业协会数据URL有哪些？ | 待用户提供 |
-| 3 | 是否需要保留机构持仓功能？（Tushare免费版有限） | 待确认 |
+| 1 | 是否提供 Tushare token？ | ✅ 已确认不需要（免费版权限有限） |
+| 2 | 行业协会数据URL有哪些？ | ✅ 已确认不需要（使用申万行业即可） |
+| 3 | 是否需要保留机构持仓功能？ | ✅ 已确认不需要 |
 | 4 | 是否有特定行业优先开发需求？ | 待确认 |
 | 5 | 数据存储路径偏好？ | 默认 `./data/results` |
+| 6 | 阶段二详细设计是否确认？ | 待确认 |
 
 ---
 
