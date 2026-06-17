@@ -88,10 +88,10 @@ class IndustryPEPBHistoryCalculator:
         result = {
             '行业代码': sw_index_code,
             '行业名称': row.iloc[0]['行业名称'],
-            'pe_ttm': self._safe_float(row.iloc[0]['PE(TTM)']),
-            'pb': self._safe_float(row.iloc[0]['PB']),
-            '股息率': self._safe_float(row.iloc[0]['股息率']),
-            '总市值': self._safe_float(row.iloc[0]['总市值']),
+            'pe_ttm': self._safe_float(row.iloc[0]['TTM(滚动)市盈率']),
+            'pe_static': self._safe_float(row.iloc[0]['静态市盈率']),
+            'pb': self._safe_float(row.iloc[0]['市净率']),
+            '股息率': self._safe_float(row.iloc[0]['静态股息率']),
             'update_time': datetime.now(),
         }
 

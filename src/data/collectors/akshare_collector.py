@@ -125,10 +125,10 @@ class AkshareCollector(BaseCollector):
 
     def get_industry_pe_pb(self, industry_name: str) -> Optional[Dict[str, float]]:
         """
-        根据行业名称获取 PE/PB
+        根据行业名称或代码获取 PE/PB
 
         Args:
-            industry_name: 申万二级行业名称
+            industry_name: 申万二级行业名称或代码（如"航空机场"或"801991.SI"）
 
         Returns:
             包含 pe_ttm, pb 的字典
@@ -137,20 +137,26 @@ class AkshareCollector(BaseCollector):
         if df.empty:
             return None
 
-        # 匹配行业名称
-        row = df[df['行业名称'] == industry_name]
+        # 优先按代码匹配
+        row = df[df['行业代码'] == industry_name]
+
+        # 如果不是代码，尝试按名称匹配
         if row.empty:
-            # 尝试模糊匹配
+            row = df[df['行业名称'] == industry_name]
+
+        # 如果精确匹配失败，尝试模糊匹配
+        if row.empty:
             row = df[df['行业名称'].str.contains(industry_name, na=False)]
 
         if not row.empty:
             result = {
                 '行业代码': row.iloc[0]['行业代码'],
                 '行业名称': row.iloc[0]['行业名称'],
-                'pe_ttm': float(row.iloc[0]['PE(TTM)']) if pd.notna(row.iloc[0]['PE(TTM)']) else None,
-                'pb': float(row.iloc[0]['PB']) if pd.notna(row.iloc[0]['PB']) else None,
-                '股息率': float(row.iloc[0]['股息率']) if pd.notna(row.iloc[0]['股息率']) else None,
-                '总市值': float(row.iloc[0]['总市值']) if pd.notna(row.iloc[0]['总市值']) else None,
+                'pe_ttm': self._safe_float(row.iloc[0]['TTM(滚动)市盈率']) if pd.notna(row.iloc[0]['TTM(滚动)市盈率']) else None,
+                'pe_static': self._safe_float(row.iloc[0]['静态市盈率']) if pd.notna(row.iloc[0]['静态市盈率']) else None,
+                'pb': self._safe_float(row.iloc[0]['市净率']) if pd.notna(row.iloc[0]['市净率']) else None,
+                '股息率': self._safe_float(row.iloc[0]['静态股息率']) if pd.notna(row.iloc[0]['静态股息率']) else None,
+                '总市值': None,  # 该接口不提供总市值
             }
             logger.debug(f"行业 {industry_name} 的 PE/PB: {result}")
             return result
