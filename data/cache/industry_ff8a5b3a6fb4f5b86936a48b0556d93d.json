@@ -1,0 +1,24 @@
+{
+  "data": {
+    "name": "航空机场",
+    "sw_code": "801991.SI",
+    "baostock_code": "G56",
+    "current_price": null,
+    "current_pe": 21.68,
+    "current_pb": 2.11,
+    "pe_percentile": null,
+    "pb_percentile": null,
+    "price_trend": null,
+    "price_change_pct": null,
+    "valuation_trend": null,
+    "benchmarks": [
+      "旅客周转量",
+      "客座率",
+      "航油价格"
+    ],
+    "update_time": "2026-06-18T20:58:09.180984",
+    "divergence_signal": "无明显背离"
+  },
+  "created_at": "2026-06-18T20:58:49.396984",
+  "expires_at": "2026-06-19T20:58:49.396990"
+}
