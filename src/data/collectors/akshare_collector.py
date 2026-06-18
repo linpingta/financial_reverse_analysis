@@ -42,6 +42,16 @@ class AkshareCollector(BaseCollector):
         """检查是否已初始化"""
         return self._connected
 
+    @staticmethod
+    def _safe_float(value) -> Optional[float]:
+        """安全转换为浮点数"""
+        if value is None or pd.isna(value):
+            return None
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+
     def get_sw_index_second_info(self) -> pd.DataFrame:
         """
         获取申万二级行业实时估值数据
