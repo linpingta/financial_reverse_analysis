@@ -18,23 +18,27 @@ class PercentileCalculator:
     支持单指标和多指标的分位计算，处理边界情况
     """
 
-    def __init__(self, history_years: int = 10, min_data_points: int = 52):
+    def __init__(self, history_years: int = 10, min_data_points: int = 520):
         """
         初始化分位计算器
 
         Args:
-            history_years: 历史数据年限
-            min_data_points: 最小数据点数要求（低于此值不计算分位）
+            history_years: 历史数据年限（用于计算期望最小数据点）
+            min_data_points: 最小数据点数要求
+                             - 10年 * 52周 = 520（周数据）
+                             - 低于此值不计算分位或降低置信度
         """
         self.history_years = history_years
-        self.min_data_points = min_data_points
+        # 自动计算期望的最小数据点数：history_years * 52
+        self.min_data_points = min_data_points or (history_years * 52)
         self._cache: Dict[str, pd.DataFrame] = {}
 
     def calculate_single_percentile(
         self,
         data_series: pd.Series,
         current_value: Optional[float] = None,
-        method: str = 'rank'
+        method: str = 'rank',
+        use_dynamic_window: bool = True
     ) -> Dict[str, Any]:
         """
         计算单个指标的分位
@@ -43,16 +47,14 @@ class PercentileCalculator:
             data_series: 历史数据序列
             current_value: 当前值（可选，不提供则取序列最后一个值）
             method: 计算方法 ('rank' 或 'cdf')
+            use_dynamic_window: 是否使用动态窗口调整（数据不足时降低阈值）
 
         Returns:
             分位计算结果字典
         """
         # 数据预处理
         data = data_series.dropna()
-
-        if len(data) < self.min_data_points:
-            logger.warning(f"数据点不足 ({len(data)} < {self.min_data_points})，无法计算分位")
-            return self._create_empty_result(current_value)
+        data_len = len(data)
 
         # 获取当前值
         if current_value is None:
@@ -61,6 +63,25 @@ class PercentileCalculator:
         if current_value is None:
             logger.warning("当前值为空")
             return self._create_empty_result(None)
+
+        # 动态窗口调整机制
+        window_adjusted = False
+        effective_min_points = self.min_data_points
+
+        if data_len < self.min_data_points:
+            if use_dynamic_window and data_len >= 52:  # 至少1年数据
+                # 动态降低阈值：使用实际可用的数据点
+                effective_min_points = data_len
+                window_adjusted = True
+                logger.info(f"数据点不足 ({data_len} < {self.min_data_points})，"
+                           f"启用动态窗口，使用 {data_len} 个数据点计算")
+            else:
+                logger.warning(f"数据点严重不足 ({data_len} < {self.min_data_points})，无法计算分位")
+                result = self._create_empty_result(current_value)
+                result['data_insufficient'] = True
+                result['data_points'] = data_len
+                result['required_points'] = self.min_data_points
+                return result
 
         # 计算分位
         if method == 'cdf':
@@ -80,9 +101,10 @@ class PercentileCalculator:
             'history_mean': round(data.mean(), 2),
             'history_median': round(data.median(), 2),
             'history_std': round(data.std(), 2),
-            'data_points': len(data),
+            'data_points': data_len,
             'method': method,
-            'confidence': self._calculate_confidence(len(data)),
+            'confidence': self._calculate_confidence(data_len),
+            'window_adjusted': window_adjusted,  # 标记是否启用了动态窗口
         }
 
         logger.debug(f"分位计算完成: 当前值={current_value:.2f}, 分位={percentile:.2f}%")

@@ -2,6 +2,12 @@
 背离分析引擎
 
 检测价格与估值、价格与景气度之间的背离信号
+
+设计文档核心逻辑（3.2条）：
+- 逆向买点背离：基本面（景气度）跌至历史最差，但股价未同步创新低
+                核心条件：价格分位 > 景气度分位
+- 逆向卖点背离：基本面升至历史最优，但股价持续走弱
+                核心条件：景气度分位 >= 80% 且近3/12月指数持续下跌
 """
 
 from typing import Optional, Dict, Any
@@ -11,12 +17,18 @@ from loguru import logger
 
 
 class DivergenceType(Enum):
-    """背离类型枚举"""
+    """背离类型枚举（与设计文档 3.2 条对应）"""
     NONE = "无背离"
-    BULLISH = "正向背离"  # 价格跌+估值升 → 潜在买入机会
-    BEARISH = "负向背离"  # 价格涨+估值降 → 潜在卖出信号
+    # 正向背离（买入机会）
+    BULLISH = "正向背离"           # 价格跌+估值升 或 价格分位>景气度分位
     WEAK_BULLISH = "弱正向背离"
+    # 逆向买点背离（设计文档核心）
+    REVERSE_BUY = "逆向买点背离"     # 价格分位 > 景气度分位（基本面已见底，股价未创新低）
+    # 负向背离（卖出预警）
+    BEARISH = "负向背离"           # 价格涨+估值降
     WEAK_BEARISH = "弱负向背离"
+    # 逆向卖点背离（设计文档核心）
+    REVERSE_SELL = "逆向卖点背离"   # 景气高位+价格下跌（基本面见顶，股价走弱）
 
 
 class DivergenceAnalyzer:
@@ -26,18 +38,235 @@ class DivergenceAnalyzer:
     检测多种背离类型：
     1. 价格-估值背离：价格趋势与估值分位趋势不一致
     2. 价格-景气背离：价格趋势与宏观景气指标趋势不一致
+    3. 基本面-价格核心背离：设计文档3.2条核心逻辑
+       - 逆向买点：价格分位 > 景气度分位
+       - 逆向卖点：景气分位 >= 80% 且价格持续下跌
     """
 
-    def __init__(self, divergence_threshold: float = 10.0, weak_threshold: float = 5.0):
+    def __init__(
+        self,
+        divergence_threshold: float = 10.0,
+        weak_threshold: float = 5.0,
+        prosperity_buy_threshold: float = 20.0,
+        prosperity_sell_threshold: float = 80.0
+    ):
         """
         初始化背离分析引擎
 
         Args:
             divergence_threshold: 背离阈值（百分点）
             weak_threshold: 弱背离阈值（百分点）
+            prosperity_buy_threshold: 景气度买点阈值（默认20%）
+            prosperity_sell_threshold: 景气度卖点阈值（默认80%）
         """
         self.divergence_threshold = divergence_threshold
         self.weak_threshold = weak_threshold
+        self.prosperity_buy_threshold = prosperity_buy_threshold
+        self.prosperity_sell_threshold = prosperity_sell_threshold
+
+    def analyze_core_divergence(
+        self,
+        prosperity_percentile: float,
+        price_percentile: float,
+        valuation_percentile: Optional[float] = None,
+        marginal_improvement: Optional[bool] = None,
+        price_trend_3m: Optional[str] = None,
+        price_trend_12m: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        分析核心背离（设计文档3.2条）
+
+        核心逻辑：
+        - 逆向买点背离：景气度分位 <= 20% 且 价格分位 > 景气度分位
+        - 逆向卖点背离：景气度分位 >= 80% 且 近3/12月价格持续下跌
+
+        Args:
+            prosperity_percentile: 景气度分位（0-100）
+            price_percentile: 价格分位（0-100）
+            valuation_percentile: 估值分位（可选）
+            marginal_improvement: 边际改善标志（True/False/None）
+            price_trend_3m: 近3月价格趋势（上涨/下跌/持平）
+            price_trend_12m: 近12月价格趋势（上涨/下跌/持平）
+
+        Returns:
+            核心背离分析结果
+        """
+        result = {
+            'prosperity_percentile': prosperity_percentile,
+            'price_percentile': price_percentile,
+            'valuation_percentile': valuation_percentile,
+            'divergence_detected': False,
+            'divergence_type': DivergenceType.NONE.value,
+            'divergence_code': DivergenceType.NONE.name,
+            'signal': '观望',
+            'strength': 0.0,
+            'conditions_met': [],
+            'conditions_failed': [],
+            'marginal_improvement': marginal_improvement,
+        }
+
+        # ===== 买点背离分析（设计文档3.2条买点核心条件）=====
+        if prosperity_percentile <= self.prosperity_buy_threshold:
+            result['conditions_met'].append(f"景气度分位 <= {self.prosperity_buy_threshold}% ({prosperity_percentile}%)")
+
+            # 核心背离条件：价格分位 > 景气度分位
+            if price_percentile > prosperity_percentile:
+                result['divergence_detected'] = True
+                result['divergence_type'] = DivergenceType.REVERSE_BUY.value
+                result['divergence_code'] = DivergenceType.REVERSE_BUY.name
+                result['signal'] = '买入机会'
+                result['conditions_met'].append(f"核心背离：价格分位({price_percentile}%) > 景气度分位({prosperity_percentile}%)")
+                result['strength'] = self._calculate_core_divergence_strength(
+                    prosperity_percentile, price_percentile, prosperity_buy=True
+                )
+
+                # 检查边际改善条件
+                if marginal_improvement is True:
+                    result['conditions_met'].append('边际改善：景气环比降幅收窄或转正')
+                elif marginal_improvement is False:
+                    result['conditions_failed'].append('边际未改善：景气仍持续恶化')
+            else:
+                result['conditions_failed'].append(f"无背离：价格分位({price_percentile}%) <= 景气度分位({prosperity_percentile}%)")
+
+            # 检查估值条件
+            if valuation_percentile is not None and valuation_percentile <= 25:
+                result['conditions_met'].append(f"估值分位 <= 25% ({valuation_percentile}%)")
+            elif valuation_percentile is not None:
+                result['conditions_failed'].append(f"估值分位 > 25% ({valuation_percentile}%)")
+
+        # ===== 卖点背离分析（设计文档3.2条卖点核心条件）=====
+        elif prosperity_percentile >= self.prosperity_sell_threshold:
+            result['conditions_met'].append(f"景气度分位 >= {self.prosperity_sell_threshold}% ({prosperity_percentile}%)")
+
+            # 检查价格持续下跌
+            price_declining = False
+            decline_count = 0
+
+            if price_trend_3m in ('下跌', '调整'):
+                decline_count += 1
+            if price_trend_12m in ('下跌', '调整'):
+                decline_count += 1
+
+            if decline_count >= 1:
+                price_declining = True
+
+            if price_declining:
+                result['divergence_detected'] = True
+                result['divergence_type'] = DivergenceType.REVERSE_SELL.value
+                result['divergence_code'] = DivergenceType.REVERSE_SELL.name
+                result['signal'] = '卖出预警'
+                result['conditions_met'].append(f'价格持续下跌（3月:{price_trend_3m}, 12月:{price_trend_12m}）')
+                result['strength'] = self._calculate_core_divergence_strength(
+                    prosperity_percentile, price_percentile, prosperity_buy=False
+                )
+            else:
+                result['conditions_failed'].append(f'价格未持续下跌（3月:{price_trend_3m}, 12月:{price_trend_12m}）')
+
+        # ===== 中性区间 =====
+        else:
+            result['signal'] = '观望'
+            result['conditions_failed'].append(f'景气度分位处于中性区间 ({prosperity_percentile}%)')
+
+        return result
+
+    def analyze_marginal_improvement(
+        self,
+        current_prosperity: float,
+        previous_prosperity: float,
+        threshold: float = 0.0
+    ) -> Dict[str, Any]:
+        """
+        检测边际改善（设计文档3.2条买点条件2）
+
+        边际改善定义：当期景气环比降幅收窄或小幅转正
+
+        Args:
+            current_prosperity: 当期景气度
+            previous_prosperity: 上期景气度
+            threshold: 改善阈值（0表示转正）
+
+        Returns:
+            边际改善检测结果
+        """
+        change = current_prosperity - previous_prosperity
+
+        # 判断边际改善：变化率收窄或转正
+        # 例如：从 -10% 改善到 -5%（降幅收窄），或从 -5% 改善到 +2%（转正）
+        is_improving = change >= threshold
+
+        # 计算改善幅度
+        if previous_prosperity != 0:
+            improvement_rate = (change / abs(previous_prosperity)) * 100
+        else:
+            improvement_rate = 100 if change > 0 else 0
+
+        result = {
+            'current_prosperity': current_prosperity,
+            'previous_prosperity': previous_prosperity,
+            'change': round(change, 2),
+            'improvement_rate': round(improvement_rate, 2),
+            'is_improving': is_improving,
+            'improvement_type': self._classify_improvement(change, threshold),
+        }
+
+        return result
+
+    def _classify_improvement(self, change: float, threshold: float) -> str:
+        """
+        分类边际改善类型
+
+        Args:
+            change: 变化值
+            threshold: 阈值
+
+        Returns:
+            改善类型描述
+        """
+        if change > threshold * 2:
+            return "明显改善"
+        elif change > threshold:
+            return "小幅改善"
+        elif change >= 0:
+            return "持平转正"
+        else:
+            return "持续恶化"
+
+    def _calculate_core_divergence_strength(
+        self,
+        prosperity_percentile: float,
+        price_percentile: float,
+        prosperity_buy: bool = True
+    ) -> float:
+        """
+        计算核心背离强度
+
+        Args:
+            prosperity_percentile: 景气度分位
+            price_percentile: 价格分位
+            prosperity_buy: 是否为买点背离
+
+        Returns:
+            强度值 (0-100)
+        """
+        if prosperity_buy:
+            # 买点背离强度：景气越低、价格相对越高，背离越强
+            # 基础强度：基于分位差
+            percentile_diff = price_percentile - prosperity_percentile
+            # 基础分（最高50分）
+            base_score = min(50, percentile_diff * 2)
+            # 景气极值加成（景气越低越好）
+            prosperity_score = max(0, (20 - prosperity_percentile)) * 1.5
+            # 价格相对位置加成（价格在高位相对更好）
+            price_score = min(25, price_percentile * 0.25)
+        else:
+            # 卖点背离强度：景气越高、价格越低，背离越强
+            percentile_diff = prosperity_percentile - price_percentile
+            base_score = min(50, percentile_diff * 2)
+            prosperity_score = min(25, (prosperity_percentile - 80) * 1.25)
+            price_score = max(0, 25 - price_percentile * 0.25)
+
+        strength = base_score + prosperity_score + price_score
+        return min(100.0, max(0.0, strength))
 
     def analyze_price_valuation_divergence(
         self,
@@ -260,9 +489,17 @@ class DivergenceAnalyzer:
         Returns:
             交易信号
         """
-        if divergence_type in (DivergenceType.BULLISH, DivergenceType.WEAK_BULLISH):
+        if divergence_type in (
+            DivergenceType.BULLISH,
+            DivergenceType.WEAK_BULLISH,
+            DivergenceType.REVERSE_BUY
+        ):
             return "买入机会"
-        elif divergence_type in (DivergenceType.BEARISH, DivergenceType.WEAK_BEARISH):
+        elif divergence_type in (
+            DivergenceType.BEARISH,
+            DivergenceType.WEAK_BEARISH,
+            DivergenceType.REVERSE_SELL
+        ):
             return "卖出预警"
         else:
             return "观望"

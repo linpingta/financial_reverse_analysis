@@ -77,7 +77,7 @@ class AnalysisEngine:
         # 初始化分析模块
         self._percentile_calculator = PercentileCalculator(
             history_years=self._config.get('history_years', 10),
-            min_data_points=self._config.get('min_data_points', 52),
+            min_data_points=self._config.get('min_data_points', 520),
         )
 
         self._divergence_analyzer = DivergenceAnalyzer(
@@ -192,13 +192,21 @@ class AnalysisEngine:
 
         # 5. 逆向评分
         logger.debug("执行逆向评分...")
+        # 获取背离分析结果
+        div_type = divergence_result.get('divergence_type', None)
+        div_detected = divergence_result.get('divergence_detected', False)
+        div_strength = divergence_result.get('divergence_strength', 0.0)
+
         scoring_result = self._reverse_scoring.calculate_overall_score(
-            pe_percentile=pe_percentile,
-            pb_percentile=pb_percentile,
-            divergence_signal=divergence_signal,
-            price_trend=price_trend,
-            risk_level=risk_result.get('overall_risk_level', '低风险'),
-            is_blocked=risk_result.get('is_blocked', False),
+            divergence_detected=div_detected,
+            divergence_type=div_type,
+            divergence_strength=div_strength,
+            prosperity_percentile=kwargs.get('prosperity_percentile'),
+            valuation_percentile=kwargs.get('valuation_percentile'),
+            price_percentile=kwargs.get('price_percentile'),
+            marginal_improvement=divergence_result.get('marginal_improvement'),
+            improvement_type=divergence_result.get('improvement_type'),
+            risk_passed=not risk_result.get('is_blocked', False),
         )
         result.scoring_data = scoring_result
 
@@ -395,7 +403,7 @@ class AnalysisEngine:
         if 'history_years' in config or 'min_data_points' in config:
             self._percentile_calculator = PercentileCalculator(
                 history_years=self._config.get('history_years', 10),
-                min_data_points=self._config.get('min_data_points', 52),
+                min_data_points=self._config.get('min_data_points', 520),
             )
 
         if 'divergence_threshold' in config or 'weak_threshold' in config:
