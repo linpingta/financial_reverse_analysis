@@ -147,13 +147,23 @@ class AnalysisEngine:
             percentile_result['pb'] = {'percentile': pb_percentile}
         result.percentile_data = percentile_result
 
-        # 2. 背离分析
-        logger.debug("执行背离分析...")
-        if price_change is not None and pe_percentile is not None:
-            valuation_deviation = pe_percentile - 50
-            divergence_result = self._divergence_analyzer.analyze_price_valuation_divergence(
-                price_change=price_change,
-                valuation_percentile_change=valuation_deviation,
+        # 2. 背离分析 - 核心背离分析
+        logger.debug("执行核心背离分析...")
+        # 使用传入的景气度、价格、估值分位进行分析
+        prosperity_pct = kwargs.get('prosperity_percentile', pe_percentile)
+        price_pct = kwargs.get('price_percentile', pe_percentile)  # 如未单独传入，使用PE分位作为代理
+        valuation_pct = kwargs.get('valuation_percentile', pe_percentile)
+        
+        divergence_result = {}
+        if prosperity_pct is not None and price_pct is not None:
+            # 调用核心背离分析
+            divergence_result = self._divergence_analyzer.analyze_core_divergence(
+                prosperity_percentile=prosperity_pct,
+                price_percentile=price_pct,
+                valuation_percentile=valuation_pct,
+                marginal_improvement=kwargs.get('marginal_improvement'),
+                price_trend_3m=price_trend,
+                price_trend_12m=kwargs.get('price_trend_12m'),
             )
         elif divergence_signal:
             # 使用传入的背离信号
@@ -161,22 +171,11 @@ class AnalysisEngine:
                 'divergence_type': divergence_signal,
                 'divergence_code': self._parse_divergence_code(divergence_signal),
                 'signal': self._get_signal_from_divergence(divergence_signal),
+                'divergence_detected': divergence_signal in ('正向背离', '逆向买点背离', '负向背离', '逆向卖点背离'),
             }
-        else:
-            divergence_result = {}
         result.divergence_data = divergence_result
 
-        # 3. 信号判定
-        logger.debug("执行信号判定...")
-        signal_result = self._signal_judgment.judge_signal(
-            pe_percentile=pe_percentile,
-            pb_percentile=pb_percentile,
-            divergence_signal=divergence_signal,
-            price_trend=price_trend,
-        )
-        result.signal_data = signal_result
-
-        # 4. 风控过滤
+        # 3. 风控过滤（先于信号判定执行，因为信号判定需要风控结果）
         logger.debug("执行风控过滤...")
         risk_result = self._risk_filter.apply_all_filters(
             industry_name=industry_name,
@@ -189,6 +188,22 @@ class AnalysisEngine:
             debt_ratio=kwargs.get('debt_ratio'),
         )
         result.risk_data = risk_result
+
+        # 4. 信号判定 - 综合信号判定
+        logger.debug("执行综合信号判定...")
+        risk_passed = not risk_result.get('is_blocked', False)
+
+        signal_result = self._signal_judgment.judge_signal_comprehensive(
+            prosperity_percentile=prosperity_pct if prosperity_pct is not None else 50.0,
+            valuation_percentile=valuation_pct if valuation_pct is not None else 50.0,
+            price_percentile=price_pct if price_pct is not None else 50.0,
+            marginal_improvement=divergence_result.get('marginal_improvement', False),
+            risk_passed=risk_passed,
+            price_trend_3m=price_trend,
+            price_trend_12m=kwargs.get('price_trend_12m'),
+            valuation_trend=kwargs.get('valuation_trend'),
+        )
+        result.signal_data = signal_result
 
         # 5. 逆向评分
         logger.debug("执行逆向评分...")
