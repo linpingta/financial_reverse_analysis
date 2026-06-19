@@ -202,12 +202,15 @@ class DataCollector:
                 data.percentile_data = percentile_data
 
             # 3. 获取趋势
+            # 注：由于申万不提供历史 PE/PB，趋势使用点位数据作为近似
+            # - price_trend: 短期窗口（12周，约3个月）反映近期走势
+            # - valuation_trend: 长期窗口（26周，约6个月）反映中期趋势
             price_trend = self._calculator.get_trend(mapping.sw_index_code, window=12)
             if price_trend:
                 data.price_trend = price_trend.get('趋势')
                 data.price_change_pct = price_trend.get('窗口变化率')
 
-            valuation_trend = self._calculator.get_trend(mapping.sw_index_code, window=12)
+            valuation_trend = self._calculator.get_trend(mapping.sw_index_code, window=26)
             if valuation_trend:
                 data.valuation_trend = valuation_trend.get('趋势')
 

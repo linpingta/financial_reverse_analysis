@@ -85,4 +85,4 @@ class BaseCollector(ABC):
 
     def is_connected(self) -> bool:
         """检查是否已连接"""
-        raise NotImplementedError
+        return self._connected

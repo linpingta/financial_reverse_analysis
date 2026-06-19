@@ -261,8 +261,13 @@ class BaostockCollector(BaseCollector):
             return []
 
         # 过滤指定行业的股票
-        # 注意：Baostock 的行业代码格式需要确认
-        stocks = df[df.iloc[:, 2].str.contains(industry_code, na=False)][df.columns[1]].tolist()
+        # 使用列名代替列索引，避免依赖列顺序
+        if 'industry' in df.columns and 'code' in df.columns:
+            mask = df['industry'].str.contains(industry_code, na=False)
+            stocks = df.loc[mask, 'code'].tolist()
+        else:
+            # Fallback: 使用列索引（兼容旧代码）
+            stocks = df[df.iloc[:, 3].str.contains(industry_code, na=False)][df.columns[1]].tolist()
         logger.info(f"行业 {industry_code} 包含 {len(stocks)} 只股票")
         return stocks
 
@@ -292,7 +297,8 @@ class BaostockCollector(BaseCollector):
                         if code not in results:
                             results[code] = df
                         else:
-                            results[code] = pd.concat([results[code], df], ignore_index=True)
+                            # 合并并去重
+                            results[code] = pd.concat([results[code], df], ignore_index=True).drop_duplicates()
                 except Exception as e:
                     logger.warning(f"获取 {code} {year} 年利润数据失败: {e}")
 
