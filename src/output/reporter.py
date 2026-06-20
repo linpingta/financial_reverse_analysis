@@ -7,6 +7,7 @@ Markdown 报告生成器
 - 支持自定义报告模板
 """
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -274,7 +275,6 @@ class Reporter:
         raw_data = result.get('raw_data', {})
         if raw_data:
             lines.append("```json")
-            import json
             lines.append(json.dumps(raw_data, indent=2, ensure_ascii=False))
             lines.append("```")
         else:

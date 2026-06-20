@@ -245,6 +245,60 @@ def test_batch_exporter():
     print()
 
 
+def test_edge_cases():
+    """测试边界情况"""
+    print("=" * 60)
+    print("测试边界情况")
+    print("=" * 60)
+
+    # 测试空数据
+    print("\n测试空数据导出:")
+    exporter = ResultExporter("data/results")
+    result = exporter.export_csv([], filename="test_empty")
+    if result is None:
+        print("✅ 空数据正确返回 None")
+    else:
+        print("❌ 空数据应该返回 None")
+
+    # 测试空数据报告生成
+    print("\n测试空数据报告生成:")
+    reporter = Reporter("reports")
+    report = reporter.generate_summary_report([], save_to_file=False)
+    print(f"✅ 空数据报告生成成功，长度={len(report)} 字符")
+
+    # 测试数据库空数据统计
+    print("\n测试数据库空数据统计:")
+    db = ResultDB("data/test_edge_cases.db")
+    stats = db.get_statistics()
+    print(f"✅ 空数据库统计成功: 总数={stats['total_count']}, 平均得分={stats['avg_score']}")
+
+    # 测试损坏的 JSON 数据
+    print("\n测试损坏的 JSON 数据:")
+    import sqlite3
+    conn = sqlite3.connect("data/test_edge_cases.db")
+    cursor = conn.cursor()
+    # 插入损坏的 JSON 数据
+    cursor.execute("""
+        INSERT INTO analysis_results (
+            run_date, industry, raw_data_json
+        ) VALUES (?, ?, ?)
+    """, ('2026-06-20', '测试行业', 'invalid json string'))
+    conn.commit()
+    conn.close()
+
+    # 查询损坏的 JSON 数据
+    results = db.query_by_date('2026-06-20')
+    print(f"✅ 损坏的 JSON 数据查询成功，找到 {len(results)} 条记录")
+    for result in results:
+        if result.get('industry') == '测试行业':
+            if 'raw_data' in result and result['raw_data'] == {}:
+                print("✅ 损坏的 JSON 正确处理为空字典")
+            else:
+                print("❌ 损坏的 JSON 处理不正确")
+
+    print()
+
+
 def main():
     """运行所有测试"""
     print("\n" + "=" * 60)
@@ -263,6 +317,9 @@ def main():
 
         # 测试批量导出器
         test_batch_exporter()
+
+        # 测试边界情况
+        test_edge_cases()
 
         print("=" * 60)
         print("✅ 所有测试通过！阶段四模块功能正常")

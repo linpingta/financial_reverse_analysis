@@ -375,9 +375,9 @@ class ResultDB:
 
             return {
                 'total_count': row[0],
-                'avg_score': round(row[1], 2) if row[1] else 0,
-                'max_score': round(row[2], 2) if row[2] else 0,
-                'min_score': round(row[3], 2) if row[3] else 0,
+                'avg_score': round(row[1], 2) if row[1] is not None else 0,
+                'max_score': round(row[2], 2) if row[2] is not None else 0,
+                'min_score': round(row[3], 2) if row[3] is not None else 0,
                 'signal_distribution': signal_stats
             }
 
@@ -417,7 +417,11 @@ class ResultDB:
         result = dict(row)
         # 解析 JSON 字段
         if result.get('raw_data_json'):
-            result['raw_data'] = json.loads(result['raw_data_json'])
+            try:
+                result['raw_data'] = json.loads(result['raw_data_json'])
+            except json.JSONDecodeError:
+                logger.warning(f"raw_data_json 解析失败: {result.get('raw_data_json')[:100]}")
+                result['raw_data'] = {}
             del result['raw_data_json']
         return result
 

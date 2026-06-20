@@ -19,6 +19,13 @@ except ImportError:
     PANDAS_AVAILABLE = False
     logger.warning("pandas 未安装，CSV/Excel 导出功能不可用")
 
+try:
+    from openpyxl.utils import get_column_letter
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    OPENPYXL_AVAILABLE = False
+    logger.warning("openpyxl 未安装，Excel 导出功能不可用")
+
 
 class ResultExporter:
     """结果导出器"""
@@ -100,6 +107,10 @@ class ResultExporter:
             logger.error("需要安装 pandas: pip install pandas")
             return None
 
+        if not OPENPYXL_AVAILABLE:
+            logger.error("需要安装 openpyxl: pip install openpyxl")
+            return None
+
         if not results:
             logger.warning("没有数据可导出")
             return None
@@ -125,7 +136,7 @@ class ResultExporter:
                         df[col].astype(str).map(len).max(),
                         len(col)
                     )
-                    worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, 50)
+                    worksheet.column_dimensions[get_column_letter(idx + 1)].width = min(max_length + 2, 50)
 
             logger.info(f"Excel 导出成功: {filepath}")
             return str(filepath)
