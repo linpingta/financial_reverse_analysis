@@ -150,10 +150,22 @@ class AnalysisEngine:
         # 2. 背离分析 - 核心背离分析
         logger.debug("执行核心背离分析...")
         # 使用传入的景气度、价格、估值分位进行分析
+        # 注：以下使用 PE 分位作为代理是当前数据采集层的限制，阶段六将完善独立的数据源
         prosperity_pct = kwargs.get('prosperity_percentile', pe_percentile)
         price_pct = kwargs.get('price_percentile', pe_percentile)  # 如未单独传入，使用PE分位作为代理
         valuation_pct = kwargs.get('valuation_percentile', pe_percentile)
-        
+
+        # 检查数据完整性并记录警告
+        if prosperity_pct is None:
+            logger.warning(f"行业 {industry_name} 景气度分位数据缺失，使用默认值50.0代替")
+            prosperity_pct = 50.0
+        if price_pct is None:
+            logger.warning(f"行业 {industry_name} 价格分位数据缺失，使用默认值50.0代替")
+            price_pct = 50.0
+        if valuation_pct is None:
+            logger.warning(f"行业 {industry_name} 估值分位数据缺失，使用默认值50.0代替")
+            valuation_pct = 50.0
+
         divergence_result = {}
         if prosperity_pct is not None and price_pct is not None:
             # 调用核心背离分析
@@ -194,9 +206,9 @@ class AnalysisEngine:
         risk_passed = not risk_result.get('is_blocked', False)
 
         signal_result = self._signal_judgment.judge_signal_comprehensive(
-            prosperity_percentile=prosperity_pct if prosperity_pct is not None else 50.0,
-            valuation_percentile=valuation_pct if valuation_pct is not None else 50.0,
-            price_percentile=price_pct if price_pct is not None else 50.0,
+            prosperity_percentile=prosperity_pct,
+            valuation_percentile=valuation_pct,
+            price_percentile=price_pct,
             marginal_improvement=divergence_result.get('marginal_improvement', False),
             risk_passed=risk_passed,
             price_trend_3m=price_trend,

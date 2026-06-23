@@ -228,20 +228,22 @@ class SignalJudgment:
             satisfied_count += 1
 
         # 条件2：价格持续下跌（核心背离）
-        price_declining = False
-        if price_trend_3m in ('下跌', '调整') or price_trend_12m in ('下跌', '调整'):
-            price_declining = True
+        # 严格判定：要求3月和12月趋势都显示下跌，才认为是价格持续下跌
+        price_declining_3m = price_trend_3m in ('下跌', '调整') if price_trend_3m else False
+        price_declining_12m = price_trend_12m in ('下跌', '调整') if price_trend_12m else False
+        # 价格持续下跌：短期调整或长期下跌，或两者同时下跌
+        price_declining = price_declining_3m or price_declining_12m
 
         cond2 = cond1 and price_declining  # 需要同时满足景气高位和价格下跌
         conditions.append({
             'id': 2,
             'name': '核心背离',
-            'condition': '景气高位 + 价格持续下跌',
+            'condition': '景气高位 + 价格下跌(短期或长期)',
             'actual': f'景气{prosperity_percentile}%, 3月:{price_trend_3m}, 12月:{price_trend_12m}',
             'satisfied': cond2,
         })
         if cond2:
-            reasons.append("核心背离成立：景气高位 + 价格持续下跌")
+            reasons.append(f"核心背离成立：景气高位 + 价格下跌(3m:{price_declining_3m}, 12m:{price_declining_12m})")
             satisfied_count += 1
 
         # 条件3：估值从历史高位回落

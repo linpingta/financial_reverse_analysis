@@ -240,6 +240,22 @@ class DivergenceAnalyzer:
         """
         计算核心背离强度
 
+        计算公式设计说明：
+        1. 背离强度基于三个维度：
+           - 分位差 (base_score): 价格分位与景气分位的差值，反映背离程度
+           - 景气极值加成 (prosperity_score): 景气越极端，背离信号越强
+           - 价格位置加成 (price_score): 买点背离时价格相对高更安全，卖点反之
+
+        2. 系数选择依据：
+           - percentile_diff * 2: 差值每1%得2分，满分50分（差值25%时满分）
+           - 1.5: 景气加成系数，当景气从20%降到0%时增加30分
+           - 0.25: 价格位置系数，当价格分位100%时再加25分
+
+        3. 设计原则：
+           - 背离强度上限100分
+           - 各维度贡献相对均衡
+           - 参数敏感性在阶段六验证调整
+
         Args:
             prosperity_percentile: 景气度分位
             price_percentile: 价格分位
@@ -252,17 +268,19 @@ class DivergenceAnalyzer:
             # 买点背离强度：景气越低、价格相对越高，背离越强
             # 基础强度：基于分位差
             percentile_diff = price_percentile - prosperity_percentile
-            # 基础分（最高50分）
+            # 基础分（最高50分）：差值每1%得2分，25%差值时满分
             base_score = min(50, percentile_diff * 2)
-            # 景气极值加成（景气越低越好）
+            # 景气极值加成（最高30分）：景气越低越好，20%以下时加成最大
             prosperity_score = max(0, (20 - prosperity_percentile)) * 1.5
-            # 价格相对位置加成（价格在高位相对更好）
+            # 价格相对位置加成（最高25分）：价格在高位时加分
             price_score = min(25, price_percentile * 0.25)
         else:
             # 卖点背离强度：景气越高、价格越低，背离越强
             percentile_diff = prosperity_percentile - price_percentile
             base_score = min(50, percentile_diff * 2)
+            # 景气高位加成（最高25分）：景气超过80%时开始加分
             prosperity_score = min(25, (prosperity_percentile - 80) * 1.25)
+            # 价格低位加成（最高25分）：价格在低位时加分
             price_score = max(0, 25 - price_percentile * 0.25)
 
         strength = base_score + prosperity_score + price_score

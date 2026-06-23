@@ -174,13 +174,10 @@ def analyze(ctx, industry, analyze_all, output, save_db, generate_report):
             try:
                 # 采集数据
                 click.echo("  → 采集行业数据...")
-                industry_data = collector.collect_industry(
-                    industry_name=industry_name,
-                    sw_code=sw_code,
-                    baostock_code=baostock_code
-                )
+                industry_data = collector.collect_industry(industry_name)
 
                 if industry_data is None:
+                    logger.error(f"数据采集失败: 行业={industry_name}, 原因=行业映射不存在或数据获取失败")
                     click.echo(f"  ✗ 数据采集失败，跳过该行业", err=True)
                     continue
 
