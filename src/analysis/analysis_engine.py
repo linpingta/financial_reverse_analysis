@@ -86,10 +86,9 @@ class AnalysisEngine:
         )
 
         self._signal_judgment = SignalJudgment(
-            buy_valuation_threshold=self._config.get('buy_valuation_threshold', 20.0),
-            sell_valuation_threshold=self._config.get('sell_valuation_threshold', 80.0),
-            strong_buy_threshold=self._config.get('strong_buy_threshold', 10.0),
-            strong_sell_threshold=self._config.get('strong_sell_threshold', 90.0),
+            prosperity_buy_threshold=self._config.get('percentile', {}).get('low_threshold', 20.0),
+            prosperity_sell_threshold=self._config.get('percentile', {}).get('high_threshold', 80.0),
+            valuation_buy_threshold=self._config.get('signal', {}).get('min_percentile_diff', 25.0),
         )
 
         self._risk_filter = RiskFilter(self._config.get('risk_config', {}))

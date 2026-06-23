@@ -103,14 +103,14 @@ class AkshareCollector(BaseCollector):
             logger.error(f"获取申万一级行业列表失败: {e}")
             return pd.DataFrame()
 
-    def get_sw_index_daily(self, indicator: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def get_sw_index_daily(self, indicator: str, start_date: str = None, end_date: str = None) -> pd.DataFrame:
         """
         获取申万行业指数历史日线数据
 
         Args:
-            indicator: 申万行业代码，如 "801991.SI"
-            start_date: 开始日期 "YYYYMMDD"
-            end_date: 结束日期 "YYYYMMDD"
+            indicator: 申万行业代码，如 "801991.SI" 或 "801991"
+            start_date: 开始日期 "YYYYMMDD" (可选，用于数据过滤)
+            end_date: 结束日期 "YYYYMMDD" (可选，用于数据过滤)
 
         Returns:
             申万行业指数历史数据
@@ -121,13 +121,30 @@ class AkshareCollector(BaseCollector):
         logger.info(f"获取申万行业历史数据: {indicator}")
 
         def _do_fetch():
-            return self._ak.sw_index_daily(indicator=indicator, start_date=start_date, end_date=end_date)
+            symbol = indicator.replace('.SI', '')
+            return self._ak.index_hist_sw(symbol=symbol, period='day')
 
         try:
             df = self._retry_wrapper(_do_fetch)
             if not df.empty:
                 logger.info(f"获取到 {len(df)} 条申万行业历史数据")
-                df.columns = [c.strip() for c in df.columns]
+                
+                column_mapping = {
+                    '代码': 'code',
+                    '日期': 'date',
+                    '收盘': 'close',
+                    '开盘': 'open',
+                    '最高': 'high',
+                    '最低': 'low',
+                    '成交量': 'volume',
+                    '成交额': 'amount',
+                }
+                df = df.rename(columns=column_mapping)
+                
+                if start_date and end_date:
+                    df['date'] = df['date'].astype(str)
+                    df = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
+                    logger.info(f"过滤后剩余 {len(df)} 条数据")
             return df
         except Exception as e:
             logger.error(f"获取申万行业 {indicator} 历史数据失败: {e}")

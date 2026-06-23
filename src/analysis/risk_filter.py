@@ -89,6 +89,7 @@ class RiskFilter:
             'risk_type': RiskType.SUNSET_INDUSTRY.value,
             'risk_code': RiskType.SUNSET_INDUSTRY.name,
             'risk_level': RiskLevel.HIGH.value if is_sunset else RiskLevel.LOW.value,
+            'risk_level_code': RiskLevel.HIGH.name if is_sunset else RiskLevel.LOW.name,
             'is_blocked': is_sunset,
             'reason': f"行业 '{industry_name}' 属于夕阳行业" if is_sunset else None,
             'keywords': self._sunset_industries,
@@ -135,6 +136,7 @@ class RiskFilter:
             'risk_type': RiskType.OVERCAPACITY.value,
             'risk_code': RiskType.OVERCAPACITY.name,
             'risk_level': risk_level.value,
+            'risk_level_code': risk_level.name,
             'is_blocked': is_blocked,
             'reason': reason,
             'capacity_utilization': capacity_utilization,
@@ -182,6 +184,7 @@ class RiskFilter:
             'risk_type': RiskType.POLICY_RISK.value,
             'risk_code': RiskType.POLICY_RISK.name,
             'risk_level': risk_level.value,
+            'risk_level_code': risk_level.name,
             'is_blocked': is_blocked,
             'reason': reason,
             'policy_score': policy_score,
@@ -228,6 +231,7 @@ class RiskFilter:
             'risk_type': RiskType.LIQUIDITY_RISK.value,
             'risk_code': RiskType.LIQUIDITY_RISK.name,
             'risk_level': risk_level.value,
+            'risk_level_code': risk_level.name,
             'is_blocked': is_blocked,
             'reason': reason,
             'avg_volume': avg_volume,
@@ -283,6 +287,7 @@ class RiskFilter:
             'risk_type': RiskType.FINANCIAL_RISK.value,
             'risk_code': RiskType.FINANCIAL_RISK.name,
             'risk_level': risk_level.value,
+            'risk_level_code': risk_level.name,
             'is_blocked': is_blocked,
             'reason': reason,
             'pe': pe,
@@ -322,6 +327,7 @@ class RiskFilter:
             'filters': [],
             'blocked_by': [],
             'overall_risk_level': RiskLevel.LOW.value,
+            'overall_risk_level_code': RiskLevel.LOW.name,
             'is_blocked': False,
             'risk_summary': [],
         }
@@ -348,10 +354,11 @@ class RiskFilter:
                     results['risk_summary'].append(result['reason'])
 
                 # 更新整体风险等级
-                current_level = RiskLevel[result['risk_level'].replace('风险', '')]
-                overall_level = RiskLevel[results['overall_risk_level'].replace('风险', '')]
+                current_level = RiskLevel[result['risk_level_code']]
+                overall_level = RiskLevel[results['overall_risk_level_code']]
                 if current_level.value > overall_level.value:
                     results['overall_risk_level'] = result['risk_level']
+                    results['overall_risk_level_code'] = result['risk_level_code']
 
             except Exception as e:
                 logger.error(f"应用 {filter_name} 过滤器失败: {e}")
