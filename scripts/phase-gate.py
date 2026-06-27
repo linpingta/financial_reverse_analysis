@@ -290,6 +290,7 @@ class PhaseGate:
         if passed:
             phase['status'] = 'completed'
             phase['completed_at'] = datetime.now().isoformat(timespec='seconds')
+            phase['review_rounds'] += 1  # 通过也计为一轮 review
             phase['last_review_issues'] = []
             self.save_state(state)
             self.log_history('review_pass', phase=n, rounds=phase['review_rounds'])
