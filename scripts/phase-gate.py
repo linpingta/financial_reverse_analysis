@@ -30,6 +30,7 @@ phase-gate.py - 阶段化开发状态机
 import argparse
 import json
 import re
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -140,6 +141,189 @@ class PhaseGate:
             if p['num'] == n:
                 return p
         return None
+
+    # ---------------- Git 集成 ----------------
+
+    def _detect_git_repo(self, start_dir: Path):
+        """检测 start_dir（或其父目录链）是否在 git 仓库内。
+        返回 (repo_root: Path | None, is_repo: bool)。
+        如果 git 命令不存在或超时，返回 (None, False)。
+        """
+        try:
+            result = subprocess.run(
+                ['git', 'rev-parse', '--show-toplevel'],
+                cwd=str(start_dir),
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return Path(result.stdout.strip()), True
+            return None, False
+        except FileNotFoundError:
+            # 系统没有 git 命令
+            return None, False
+        except subprocess.TimeoutExpired:
+            return None, False
+        except Exception:
+            return None, False
+
+    def _has_git_user_config(self, repo_root: Path):
+        """检查 git 是否配置了 user.name 和 user.email"""
+        try:
+            for key in ('user.name', 'user.email'):
+                r = subprocess.run(
+                    ['git', 'config', '--get', key],
+                    cwd=str(repo_root), capture_output=True, text=True, timeout=5,
+                )
+                if r.returncode != 0 or not r.stdout.strip():
+                    return False
+            return True
+        except Exception:
+            return False
+
+    def _set_fallback_git_user(self, repo_root: Path):
+        """为本次 commit 设置 fallback user（如果未配置）"""
+        try:
+            subprocess.run(
+                ['git', 'config', 'user.name', 'phase-gated-dev'],
+                cwd=str(repo_root), capture_output=True, timeout=5,
+            )
+            subprocess.run(
+                ['git', 'config', 'user.email', 'phase-gated-dev@local'],
+                cwd=str(repo_root), capture_output=True, timeout=5,
+            )
+            return True
+        except Exception:
+            return False
+
+    def _git_add_and_commit(self, repo_root: Path, message: str, add_all: bool = True):
+        """在 repo_root 执行 git add + commit。
+        返回 (success: bool, output: str)。失败不抛异常。
+        """
+        try:
+            if add_all:
+                r = subprocess.run(
+                    ['git', 'add', '.'],
+                    cwd=str(repo_root), capture_output=True, text=True, timeout=30,
+                )
+                if r.returncode != 0:
+                    return False, f'git add 失败:\n{r.stderr}'
+            r = subprocess.run(
+                ['git', 'commit', '-m', message],
+                cwd=str(repo_root), capture_output=True, text=True, timeout=30,
+            )
+            if r.returncode != 0:
+                # 无变化（nothing to commit）也视为成功但提示
+                if 'nothing to commit' in (r.stdout + r.stderr).lower():
+                    return True, r.stdout + r.stderr
+                return False, f'git commit 失败:\n{r.stderr}\n{r.stdout}'
+            return True, r.stdout
+        except subprocess.TimeoutExpired:
+            return False, 'git 命令超时'
+        except Exception as e:
+            return False, f'git 异常: {e}'
+
+    def _generate_commit_message(self, phase: dict, custom: str = None) -> str:
+        """生成 phase commit message"""
+        if custom:
+            return custom
+        n = phase['num']
+        title = phase['title']
+        rounds = phase.get('review_rounds', 0)
+        completed_at = phase.get('completed_at') or datetime.now().isoformat(timespec='seconds')
+
+        msg = f"""phase {n}: {title}
+
+review 轮数: {rounds}
+通过时间: {completed_at}
+
+Co-Authored-By: phase-gated-dev <noreply@local>"""
+        return msg
+
+    def cmd_commit(self, n: int = None, message: str = None, dry_run: bool = False):
+        """commit 指定 phase（或当前 in_progress phase）的改动。
+        没有 git 仓库 → 跳过 + 提示（不报错）。
+        git 命令失败 → warning，不阻塞 phase 流程。
+        """
+        state = self.load_state()
+        if not state:
+            print('❌ 未初始化。请先运行 init。', file=sys.stderr)
+            sys.exit(1)
+
+        # 找目标 phase
+        if n is None:
+            target = next((p for p in state['phases'] if p['status'] == 'in_progress'), None)
+            if not target:
+                # 退而求其次：最近一个 completed
+                completed = [p for p in state['phases'] if p['status'] == 'completed']
+                if not completed:
+                    print('⚠ 没有可 commit 的 phase（in_progress 或 completed 都没有）。', file=sys.stderr)
+                    sys.exit(1)
+                target = max(completed, key=lambda p: p['num'])
+                print(f'⚠ 没有 in_progress phase，使用最近完成: phase {target["num"]}')
+            n = target['num']
+        else:
+            target = self._find_phase(state, n)
+            if not target:
+                print(f'❌ Phase {n} 不存在。', file=sys.stderr)
+                sys.exit(1)
+            if target['status'] not in ('in_progress', 'completed'):
+                print(f'⚠ Phase {n} 状态是 {target["status"]}，不适合 commit（应 in_progress 或 completed）。', file=sys.stderr)
+                sys.exit(1)
+
+        # 检测 git 仓库（从 plan 所在目录开始）
+        plan_path = Path(state['plan_file'])
+        start_dir = plan_path.parent
+        repo_root, is_repo = self._detect_git_repo(start_dir)
+
+        if not is_repo:
+            print(f'⚠ 未检测到 git 仓库（从 {start_dir} 向上查找）')
+            print('   跳过 git commit，不影响 phase 状态。')
+            print('   如需启用 git 管理：在项目根运行 `git init` 初始化仓库后重试。')
+            return  # exit 0，不算错
+
+        print(f'>> 检测到 git 仓库: {repo_root}')
+
+        # 检查/设置 user 配置
+        if not self._has_git_user_config(repo_root):
+            print('⚠ git 未配置 user.name/user.email，使用 fallback。')
+            if not dry_run:
+                self._set_fallback_git_user(repo_root)
+
+        # 生成 commit message
+        commit_msg = self._generate_commit_message(target, custom=message)
+
+        if dry_run:
+            print('\n[dry-run] 将执行:')
+            print(f'  cd {repo_root}')
+            print(f'  git add .')
+            print(f'  git commit -m "{commit_msg.split(chr(10))[0]}..."')
+            print('\n完整 message:')
+            print('---')
+            print(commit_msg)
+            print('---')
+            return
+
+        # 执行
+        print(f'>> 提交 phase {n} ({target["title"]}) ...')
+        success, output = self._git_add_and_commit(repo_root, commit_msg)
+
+        if success:
+            # 记录到 history.log
+            state.setdefault('git_commits', []).append({
+                'phase': n,
+                'time': datetime.now().isoformat(timespec='seconds'),
+                'repo': str(repo_root),
+            })
+            self.save_state(state)
+            self.log_history('git_commit', phase=n, repo=str(repo_root))
+            print('✅ git commit 成功')
+            # 显示简短输出（git commit 通常最后一行是分支+short SHA）
+            tail = output.strip().splitlines()[-3:] if output.strip() else []
+            for line in tail:
+                print(f'   {line}')
+        else:
+            print(f'⚠ git commit 失败（不影响 phase 状态）：\n{output}')
+            print('   请手动检查：是否有未解决的 conflict / hook 失败 / 权限问题')
 
     # ---------------- 子命令 ----------------
 
@@ -398,6 +582,10 @@ def main():
   %(prog)s reset 1
   %(prog)s skip 2
   %(prog)s list
+  %(prog)s commit          # commit 当前 in_progress phase
+  %(prog)s commit 2        # commit 指定 phase
+  %(prog)s commit --dry-run
+  %(prog)s commit 3 -m "fix: 修复分析引擎边界条件"
 """,
     )
 
@@ -431,6 +619,14 @@ def main():
 
     sub.add_parser('list', help='列出所有 phases')
 
+    p_commit = sub.add_parser('commit', help='git commit 当前或指定 phase 的改动（无 git 仓库时跳过）')
+    p_commit.add_argument('phase', type=int, nargs='?', default=None,
+                          help='要 commit 的 phase 编号（默认：当前 in_progress 或最近完成）')
+    p_commit.add_argument('-m', '--message', dest='message', type=str, default=None,
+                          help='自定义 commit message（覆盖默认模板）')
+    p_commit.add_argument('--dry-run', dest='dry_run', action='store_true',
+                          help='只显示将执行的 commit，不实际提交')
+
     args = parser.parse_args()
 
     # 确定 skill_dir：脚本所在目录的上级
@@ -454,6 +650,8 @@ def main():
             gate.cmd_skip(args.phase)
         elif args.cmd == 'list':
             gate.cmd_list()
+        elif args.cmd == 'commit':
+            gate.cmd_commit(args.phase, args.message, args.dry_run)
     except KeyboardInterrupt:
         print('\n中断', file=sys.stderr)
         sys.exit(130)

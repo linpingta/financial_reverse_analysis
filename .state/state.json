@@ -14,17 +14,17 @@
     {
       "num": 2,
       "title": "API接口开发",
-      "status": "pending",
-      "started_at": null,
-      "completed_at": null,
-      "review_rounds": 0,
+      "status": "completed",
+      "started_at": "2026-06-27T16:47:03",
+      "completed_at": "2026-06-27T16:54:00",
+      "review_rounds": 1,
       "last_review_issues": []
     },
     {
       "num": 3,
       "title": "前端页面开发",
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-27T17:12:19",
       "completed_at": null,
       "review_rounds": 0,
       "last_review_issues": []
