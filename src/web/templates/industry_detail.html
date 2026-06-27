@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}{{ industry_name }} - 行业详情{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold text-gray-900">{{ industry_name }}</h1>
+        <a href="/history" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition">
+            返回历史记录
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-500 mb-2">当前评分</div>
+            <div class="text-3xl font-bold text-blue-600">85</div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-500 mb-2">PE分位数</div>
+            <div class="text-3xl font-bold text-green-600">25.5%</div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-500 mb-2">PB分位数</div>
+            <div class="text-3xl font-bold text-green-600">20.3%</div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-500 mb-2">操作建议</div>
+            <div class="text-3xl font-bold text-green-600">买入</div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">历史走势</h2>
+        <div id="trend-chart" class="h-64 flex items-center justify-center text-gray-400">
+            图表加载中...
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">关键指标</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+                <div class="text-sm font-medium text-gray-500 mb-1">当前PE</div>
+                <div class="text-lg font-semibold text-gray-900">15.2</div>
+            </div>
+            <div>
+                <div class="text-sm font-medium text-gray-500 mb-1">当前PB</div>
+                <div class="text-lg font-semibold text-gray-900">1.5</div>
+            </div>
+            <div>
+                <div class="text-sm font-medium text-gray-500 mb-1">背离度</div>
+                <div class="text-lg font-semibold text-gray-900">-0.8</div>
+            </div>
+            <div>
+                <div class="text-sm font-medium text-gray-500 mb-1">风险等级</div>
+                <div class="text-lg font-semibold text-green-600">低</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        showToast('行业详情页面开发中...', 'info');
+    });
+</script>
+{% endblock %}

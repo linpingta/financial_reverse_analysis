@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}系统配置 - 逆向周期行业投资分析系统{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold text-gray-900">系统配置</h1>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">系统状态</h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <div class="text-sm font-medium text-gray-500 mb-1">系统版本</div>
+                <div class="text-lg font-semibold text-gray-900">1.0.0</div>
+            </div>
+            <div>
+                <div class="text-sm font-medium text-gray-500 mb-1">运行状态</div>
+                <div class="text-lg font-semibold text-green-600">正常运行</div>
+            </div>
+            <div>
+                <div class="text-sm font-medium text-gray-500 mb-1">数据库状态</div>
+                <div class="text-lg font-semibold text-green-600">已连接</div>
+            </div>
+            <div>
+                <div class="text-sm font-medium text-gray-500 mb-1">缓存状态</div>
+                <div class="text-lg font-semibold text-green-600">已启用</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">配置参数</h2>
+        
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">数据更新频率</label>
+                <select class="select-field">
+                    <option value="daily">每日</option>
+                    <option value="weekly">每周</option>
+                    <option value="monthly">每月</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">评分阈值</label>
+                <input type="number" value="70" class="input-field">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">分位数阈值</label>
+                <input type="number" value="30" class="input-field">
+            </div>
+            
+            <div>
+                <button class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition">
+                    保存配置
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        showToast('系统配置页面开发中...', 'info');
+    });
+</script>
+{% endblock %}
