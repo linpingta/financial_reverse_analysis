@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}逆向周期行业投资分析系统{% endblock %}</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-radius: 50%;
+            border-top-color: #3b82f6;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="flex items-center">
+                        <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                        <span class="ml-2 text-xl font-semibold text-gray-900">逆向周期分析系统</span>
+                    </a>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="px-3 py-2 text-gray-700 hover:text-blue-600 transition">首页</a>
+                    <a href="/analysis" class="px-3 py-2 text-gray-700 hover:text-blue-600 transition">行业分析</a>
+                    <a href="/history" class="px-3 py-2 text-gray-700 hover:text-blue-600 transition">历史记录</a>
+                    <a href="/export" class="px-3 py-2 text-gray-700 hover:text-blue-600 transition">数据导出</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-white border-t border-gray-200 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex justify-between items-center">
+                <p class="text-sm text-gray-500">
+                    &copy; 2024 逆向周期行业投资分析系统
+                </p>
+                <div class="flex space-x-4">
+                    <span id="connection-status" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        <span class="w-2 h-2 bg-gray-400 rounded-full mr-1.5"></span>
+                        未连接
+                    </span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <script>
+        const socket = io();
+        
+        socket.on('connect', function() {
+            console.log('WebSocket已连接');
+            updateConnectionStatus(true);
+        });
+        
+        socket.on('disconnect', function() {
+            console.log('WebSocket已断开');
+            updateConnectionStatus(false);
+        });
+        
+        socket.on('connected', function(data) {
+            console.log('服务器确认连接:', data);
+        });
+        
+        socket.on('progress_update', function(data) {
+            console.log('进度更新:', data);
+            if (typeof handleProgressUpdate === 'function') {
+                handleProgressUpdate(data);
+            }
+        });
+        
+        socket.on('task_complete', function(data) {
+            console.log('任务完成:', data);
+            if (typeof handleTaskComplete === 'function') {
+                handleTaskComplete(data);
+            }
+            showToast('任务完成', 'success');
+        });
+        
+        socket.on('task_error', function(data) {
+            console.error('任务错误:', data);
+            if (typeof handleTaskError === 'function') {
+                handleTaskError(data);
+            }
+            showToast('任务失败: ' + data.error, 'error');
+        });
+        
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connection-status');
+            if (connected) {
+                statusEl.innerHTML = '<span class="w-2 h-2 bg-green-400 rounded-full mr-1.5"></span>已连接';
+                statusEl.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800';
+            } else {
+                statusEl.innerHTML = '<span class="w-2 h-2 bg-gray-400 rounded-full mr-1.5"></span>未连接';
+                statusEl.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800';
+            }
+        }
+        
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const bgColor = {
+                'success': 'bg-green-500',
+                'error': 'bg-red-500',
+                'warning': 'bg-yellow-500',
+                'info': 'bg-blue-500'
+            }[type] || 'bg-blue-500';
+            
+            toast.className = `${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-2`;
+            toast.innerHTML = `
+                <span>${message}</span>
+                <button onclick="this.parentElement.remove()" class="ml-2 text-white hover:text-gray-200">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            `;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 5000);
+        }
+        
+        function formatDateTime(dateStr) {
+            const date = new Date(dateStr);
+            return date.toLocaleString('zh-CN');
+        }
+        
+        function formatPercent(value) {
+            if (value === null || value === undefined) return '-';
+            return value.toFixed(2) + '%';
+        }
+    </script>
+    
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

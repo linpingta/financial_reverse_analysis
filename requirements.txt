@@ -28,6 +28,16 @@ pydantic>=2.0.0
 # HTTP 请求（备用）
 requests>=2.28.0
 
+# Web框架
+Flask>=2.3.0
+Flask-SocketIO>=5.3.0
+
+# 生产服务器
+Waitress>=2.1.2
+
+# 数据可视化
+Plotly>=5.15.0
+
 # 测试
 pytest>=7.0.0
 pytest-cov>=4.0.0
