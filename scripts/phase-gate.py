@@ -327,7 +327,7 @@ Co-Authored-By: phase-gated-dev <noreply@local>"""
 
     # ---------------- 子命令 ----------------
 
-    def cmd_init(self, plan_path: str):
+    def cmd_init(self, plan_path: str, force: bool = False):
         plan_file = Path(plan_path).resolve()
         if not plan_file.exists():
             print(f'❌ 计划文档不存在: {plan_file}', file=sys.stderr)
@@ -343,8 +343,28 @@ Co-Authored-By: phase-gated-dev <noreply@local>"""
             sys.exit(1)
 
         if self.state_file.exists():
-            print(f'⚠ 状态文件已存在，将被覆盖。')
-            print(f'  当前状态: {self.state_file}')
+            if not force:
+                # 已有 state 时默认拒绝覆盖（防止误操作清空进度）
+                print(f'❌ 状态文件已存在，拒绝覆盖以保护进度。', file=sys.stderr)
+                print(f'   当前位置: {self.state_file}', file=sys.stderr)
+                print(f'', file=sys.stderr)
+                print(f'   如确需重新初始化：', file=sys.stderr)
+                print(f'     1. 运行 init <plan_path> --force', file=sys.stderr)
+                print(f'     2. 或手动删除 .state/state.json 后再 init', file=sys.stderr)
+                print(f'', file=sys.stderr)
+                print(f'   当前进度（status 命令可见）：', file=sys.stderr)
+                try:
+                    existing = self.load_state()
+                    for p in existing['phases']:
+                        print(f'     phase {p["num"]}: {p["title"]} [{p["status"]}]', file=sys.stderr)
+                except Exception:
+                    pass
+                sys.exit(1)
+            else:
+                # 显式 force：备份后覆盖
+                backup = self.state_file.with_suffix('.json.force-bak')
+                self.state_file.replace(backup)
+                print(f'⚠ --force 模式：已备份原 state 到 {backup.name}')
 
         state = {
             'plan_file': str(plan_file),
@@ -596,8 +616,10 @@ def main():
 
     sub = parser.add_subparsers(dest='cmd', required=True, metavar='<command>')
 
-    p_init = sub.add_parser('init', help='从开发计划文档初始化 phases')
+    p_init = sub.add_parser('init', help='从开发计划文档初始化 phases（已有 state 时需 --force）')
     p_init.add_argument('plan_path', help='计划文档路径')
+    p_init.add_argument('--force', dest='force', action='store_true',
+                        help='强制覆盖已有 state.json（会清空当前所有 phase 进度，慎用）')
 
     sub.add_parser('status', help='显示当前状态')
 
@@ -637,7 +659,7 @@ def main():
 
     try:
         if args.cmd == 'init':
-            gate.cmd_init(args.plan_path)
+            gate.cmd_init(args.plan_path, args.force)
         elif args.cmd == 'status':
             gate.cmd_status()
         elif args.cmd == 'start':

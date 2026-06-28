@@ -9,8 +9,13 @@
     </div>
 
     <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">估值分位数趋势</h2>
+        <div id="percentile-trend-chart" class="h-64"></div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">筛选条件</h2>
-        
+
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">日期</label>
@@ -83,6 +88,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
 <script>
     let currentPage = 1;
     let totalRecords = 0;
@@ -138,12 +144,21 @@
     
     function updateHistoryTable(data) {
         const tbody = document.getElementById('history-table');
-        
+
         if (data.records.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-400">暂无数据</td></tr>';
             return;
         }
-        
+
+        // 绘制分位数趋势线图 (任务4.3)
+        const trendData = data.records.map(r => ({
+            date: r.run_date,
+            industry: r.industry,
+            pe_percentile: r.pe_percentile,
+            pb_percentile: r.pb_percentile
+        }));
+        ChartsModule.createPercentileTrendChart('percentile-trend-chart', trendData);
+
         tbody.innerHTML = data.records.map(record => {
             const signalClass = {
                 'buy': 'bg-green-100 text-green-800',

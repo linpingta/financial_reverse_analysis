@@ -34,10 +34,13 @@
     </div>
 
     <div class="bg-white rounded-lg shadow p-6">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">历史走势</h2>
-        <div id="trend-chart" class="h-64 flex items-center justify-center text-gray-400">
-            图表加载中...
-        </div>
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">估值历史走势</h2>
+        <div id="history-area-chart" class="h-64"></div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">背离分析</h2>
+        <div id="divergence-mixed-chart" class="h-64"></div>
     </div>
 
     <div class="bg-white rounded-lg shadow p-6">
@@ -64,10 +67,95 @@
 </div>
 {% endblock %}
 
+{% block extra_head %}
+{% endblock %}
+
 {% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
 <script>
+    async function loadIndustryDetail() {
+        const industryName = '{{ industry_name }}';
+
+        try {
+            const response = await fetch(`/api/industry/${encodeURIComponent(industryName)}`);
+            const data = await response.json();
+
+            if (data.success) {
+                updateIndustryInfo(data.data);
+                loadChartsForIndustry(industryName, data.data);
+            } else {
+                showToast('加载行业详情失败: ' + data.error, 'error');
+            }
+        } catch (error) {
+            console.error('加载行业详情失败:', error);
+            showToast('加载行业详情失败', 'error');
+        }
+    }
+
+    async function loadChartsForIndustry(industryName, currentData) {
+        try {
+            // 加载历史数据用于图表
+            const historyResponse = await fetch(`/api/history?industry=${encodeURIComponent(industryName)}&limit=30`);
+            const historyData = await historyResponse.json();
+
+            if (historyData.success) {
+                const records = historyData.data.records;
+
+                // 绘制历史走势面积图 (任务4.6)
+                const areaData = records.map(r => ({
+                    date: r.run_date,
+                    pe: r.pe_percentile,
+                    pb: r.pb_percentile
+                }));
+                ChartsModule.createHistoryAreaChart('history-area-chart', areaData);
+
+                // 绘制背离分析组合图 (任务4.5)
+                // 需要价格数据，这里暂时用模拟数据
+                const divergenceData = records.map((r, i) => ({
+                    date: r.run_date,
+                    price: (currentData.price || 100) + (i * Math.random() * 5), // 模拟价格趋势
+                    pe: r.pe_percentile,
+                    pb: r.pb_percentile
+                }));
+                ChartsModule.createDivergenceMixedChart('divergence-mixed-chart', divergenceData);
+            }
+        } catch (error) {
+            console.error('加载图表数据失败:', error);
+        }
+    }
+    
+    function updateIndustryInfo(data) {
+        if (!data) return;
+        
+        const scoreEl = document.querySelector('.bg-white:nth-child(1) .text-3xl');
+        if (scoreEl && data.score) scoreEl.textContent = data.score;
+        
+        const peEl = document.querySelector('.bg-white:nth-child(2) .text-3xl');
+        if (peEl && data.pe_percentile) peEl.textContent = formatPercent(data.pe_percentile);
+        
+        const pbEl = document.querySelector('.bg-white:nth-child(3) .text-3xl');
+        if (pbEl && data.pb_percentile) pbEl.textContent = formatPercent(data.pb_percentile);
+        
+        const signalEl = document.querySelector('.bg-white:nth-child(4) .text-3xl');
+        if (signalEl && data.signal) {
+            const signalText = {
+                'buy': '买入',
+                'sell': '卖出',
+                'hold': '持有'
+            }[data.signal] || data.signal;
+            signalEl.textContent = signalText;
+            
+            const signalClass = {
+                'buy': 'text-green-600',
+                'sell': 'text-red-600',
+                'hold': 'text-yellow-600'
+            }[data.signal] || 'text-gray-600';
+            signalEl.className = 'text-3xl font-bold ' + signalClass;
+        }
+    }
+    
     document.addEventListener('DOMContentLoaded', function() {
-        showToast('行业详情页面开发中...', 'info');
+        loadIndustryDetail();
     });
 </script>
 {% endblock %}

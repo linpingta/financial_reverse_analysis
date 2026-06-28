@@ -66,8 +66,51 @@
 
 {% block extra_scripts %}
 <script>
+    async function loadSystemStatus() {
+        try {
+            const response = await fetch('/api/system');
+            const data = await response.json();
+            
+            if (data.success) {
+                updateSystemStatus(data.data);
+            } else {
+                showToast('加载系统状态失败: ' + data.error, 'error');
+            }
+        } catch (error) {
+            console.error('加载系统状态失败:', error);
+            showToast('加载系统状态失败', 'error');
+        }
+    }
+    
+    function updateSystemStatus(data) {
+        if (!data) return;
+        
+        const versionEl = document.querySelector('.bg-white .grid:nth-child(1) .text-lg:nth-child(1)');
+        if (versionEl && data.version) versionEl.textContent = data.version;
+        
+        const statusEl = document.querySelector('.bg-white .grid:nth-child(2) .text-lg:nth-child(1)');
+        if (statusEl && data.status) {
+            statusEl.textContent = data.status === 'running' ? '正常运行' : '异常';
+            statusEl.className = data.status === 'running' ? 'text-lg font-semibold text-green-600' : 'text-lg font-semibold text-red-600';
+        }
+        
+        const dbEl = document.querySelector('.bg-white .grid:nth-child(3) .text-lg:nth-child(1)');
+        if (dbEl && data.database_status) {
+            dbEl.textContent = data.database_status === 'connected' ? '已连接' : '未连接';
+            dbEl.className = data.database_status === 'connected' ? 'text-lg font-semibold text-green-600' : 'text-lg font-semibold text-red-600';
+        }
+    }
+    
+    document.querySelector('button.bg-blue-600').addEventListener('click', async function() {
+        const frequency = document.querySelector('select').value;
+        const scoreThreshold = document.querySelector('input[type="number"]:nth-of-type(1)').value;
+        const percentileThreshold = document.querySelector('input[type="number"]:nth-of-type(2)').value;
+        
+        showToast('配置保存功能开发中...', 'info');
+    });
+    
     document.addEventListener('DOMContentLoaded', function() {
-        showToast('系统配置页面开发中...', 'info');
+        loadSystemStatus();
     });
 </script>
 {% endblock %}
